@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useCallback, useEffect, useMemo, useState } from "react";
 import { createSaveExpense, deleteExpense, type ExpenseFormState } from "@/app/(main)/expenses/actions";
 import { useHousehold } from "@/lib/HouseholdContext";
+import { notifyHousehold } from "@/lib/notify";
 import type { ExpenseWithRelations } from "@/lib/types";
 
 type Member = { id: string; full_name: string };
@@ -12,7 +13,7 @@ type Category = { id: string; name: string };
 const initialState: ExpenseFormState = {};
 
 export default function ExpensesClient() {
-  const { supabase, household, user } = useHousehold();
+  const { supabase, household, user, profile } = useHousehold();
 
   const [loading, setLoading] = useState(true);
   const [expenses, setExpenses] = useState<ExpenseWithRelations[]>([]);
@@ -59,14 +60,25 @@ export default function ExpensesClient() {
 
   const saveExpense = useCallback(
     async (prevState: ExpenseFormState, formData: FormData) => {
+      const isNew = !formData.get("id");
       const result = await baseSaveExpense(prevState, formData);
       if (!result.error) {
         await fetchAll();
         setShowForm(false);
+        if (isNew) {
+          const description = String(formData.get("description") ?? "");
+          const amount = Number(formData.get("amount"));
+          notifyHousehold(
+            household.id,
+            user.id,
+            `Nuevo gasto de ${profile.full_name}`,
+            `${description} · $${amount.toFixed(2)}`
+          );
+        }
       }
       return result;
     },
-    [baseSaveExpense, fetchAll]
+    [baseSaveExpense, fetchAll, household.id, user.id, profile.full_name]
   );
 
   const [formState, formAction, pending] = useActionState(saveExpense, initialState);

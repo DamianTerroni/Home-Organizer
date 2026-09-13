@@ -29,3 +29,32 @@ self.addEventListener("fetch", (event) => {
     caches.match(event.request).then((cached) => cached ?? fetch(event.request))
   );
 });
+
+self.addEventListener("push", (event) => {
+  let payload = { title: "Hogar", body: "" };
+  try {
+    payload = event.data.json();
+  } catch {
+    // noop: si no viene JSON, se usa el título/cuerpo por defecto.
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ("focus" in client) return client.focus();
+      }
+      return self.clients.openWindow("/");
+    })
+  );
+});

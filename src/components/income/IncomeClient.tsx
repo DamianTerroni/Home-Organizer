@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useCallback, useEffect, useMemo, useState } from "react";
 import { createSaveIncome, deleteIncome, type IncomeFormState } from "@/app/(main)/income/actions";
 import { useHousehold } from "@/lib/HouseholdContext";
+import { notifyHousehold } from "@/lib/notify";
 import type { IncomeWithRelations } from "@/lib/types";
 
 type Member = { id: string; full_name: string };
@@ -11,7 +12,7 @@ type Member = { id: string; full_name: string };
 const initialState: IncomeFormState = {};
 
 export default function IncomeClient() {
-  const { supabase, household, user } = useHousehold();
+  const { supabase, household, user, profile } = useHousehold();
 
   const [loading, setLoading] = useState(true);
   const [incomes, setIncomes] = useState<IncomeWithRelations[]>([]);
@@ -49,14 +50,25 @@ export default function IncomeClient() {
 
   const saveIncome = useCallback(
     async (prevState: IncomeFormState, formData: FormData) => {
+      const isNew = !formData.get("id");
       const result = await baseSave(prevState, formData);
       if (!result.error) {
         await fetchAll();
         setShowForm(false);
+        if (isNew) {
+          const category = String(formData.get("category") ?? "");
+          const amount = Number(formData.get("amount"));
+          notifyHousehold(
+            household.id,
+            user.id,
+            `Nuevo ingreso de ${profile.full_name}`,
+            `${category} · $${amount.toFixed(2)}`
+          );
+        }
       }
       return result;
     },
-    [baseSave, fetchAll]
+    [baseSave, fetchAll, household.id, user.id, profile.full_name]
   );
 
   const [formState, formAction, pending] = useActionState(saveIncome, initialState);

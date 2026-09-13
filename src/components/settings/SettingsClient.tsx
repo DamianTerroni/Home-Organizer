@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useHousehold } from "@/lib/HouseholdContext";
+import { getCurrentPushSubscription, isPushSupported, subscribeToPush, unsubscribeFromPush } from "@/lib/notify";
 import type { ThemeProposal, ThemeProposalVote } from "@/lib/types";
 
 type Member = { id: string; full_name: string };
@@ -23,6 +24,35 @@ export default function SettingsClient() {
   const [proposedColor, setProposedColor] = useState(household.theme_color);
   const [proposing, setProposing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [notifSupported, setNotifSupported] = useState(false);
+  const [notifSubscribed, setNotifSubscribed] = useState(false);
+  const [notifLoading, setNotifLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isPushSupported()) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- checks push support/subscription on mount, not derived-state sync.
+    setNotifSupported(true);
+    getCurrentPushSubscription().then((sub) => setNotifSubscribed(!!sub));
+  }, []);
+
+  async function toggleNotifications() {
+    setNotifLoading(true);
+    setError(null);
+    try {
+      if (notifSubscribed) {
+        await unsubscribeFromPush(supabase);
+        setNotifSubscribed(false);
+      } else {
+        await subscribeToPush(supabase, user.id, household.id);
+        setNotifSubscribed(true);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo cambiar las notificaciones.");
+    } finally {
+      setNotifLoading(false);
+    }
+  }
 
   const fetchAll = useCallback(async () => {
     const [{ data: membersData }, { data: proposalsData }] = await Promise.all([
@@ -180,6 +210,26 @@ export default function SettingsClient() {
         </div>
         <p className="text-xs text-black/50 dark:text-white/50">Tocá tu foto para cambiarla.</p>
       </section>
+
+      {notifSupported && (
+        <section className="space-y-2 rounded-xl border border-black/10 p-4 dark:border-white/15">
+          <h2 className="text-sm font-semibold">Notificaciones</h2>
+          <p className="text-xs text-black/50 dark:text-white/50">
+            Avisa cuando otro integrante carga un gasto o un ingreso nuevo. No avisa por la lista de compras.
+          </p>
+          <button
+            onClick={toggleNotifications}
+            disabled={notifLoading}
+            className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+          >
+            {notifLoading
+              ? "..."
+              : notifSubscribed
+                ? "Desactivar notificaciones"
+                : "Activar notificaciones"}
+          </button>
+        </section>
+      )}
 
       <section className="space-y-3 rounded-xl border border-black/10 p-4 dark:border-white/15">
         <h2 className="text-sm font-semibold">Paleta de colores del hogar</h2>

@@ -88,6 +88,16 @@ create table incomes (
   created_at timestamptz not null default now()
 );
 
+create table push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  household_id uuid not null references households(id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  created_at timestamptz not null default now()
+);
+
 create table theme_proposals (
   id uuid primary key default gen_random_uuid(),
   household_id uuid not null references households(id) on delete cascade,
@@ -313,6 +323,7 @@ alter table shopping_items enable row level security;
 alter table shopping_trips enable row level security;
 alter table recurring_expenses enable row level security;
 alter table incomes enable row level security;
+alter table push_subscriptions enable row level security;
 alter table theme_proposals enable row level security;
 alter table theme_proposal_votes enable row level security;
 
@@ -407,6 +418,18 @@ create policy "update_own_incomes"
 create policy "delete_own_incomes"
   on incomes for delete
   using (created_by = auth.uid());
+
+create policy "select_own_push_subscriptions"
+  on push_subscriptions for select
+  using (user_id = auth.uid());
+
+create policy "insert_own_push_subscriptions"
+  on push_subscriptions for insert
+  with check (user_id = auth.uid());
+
+create policy "delete_own_push_subscriptions"
+  on push_subscriptions for delete
+  using (user_id = auth.uid());
 
 create policy "select_household_theme_proposals"
   on theme_proposals for select

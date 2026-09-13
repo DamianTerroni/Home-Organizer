@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import MemberBarChart, { type MemberTotal } from "@/components/charts/MemberBarChart";
 import CategoryPieChart, { type CategoryTotal } from "@/components/charts/CategoryPieChart";
+import { useHousehold } from "@/lib/HouseholdContext";
 import type { ExpenseWithRelations, IncomeWithRelations } from "@/lib/types";
 
 type Member = { id: string; full_name: string };
@@ -19,23 +20,55 @@ function endOfMonthISO() {
   return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
 }
 
-export default function DashboardClient({
-  expenses,
-  incomes,
-  members,
-  categories,
-  themeColor,
-}: {
-  expenses: ExpenseWithRelations[];
-  incomes: IncomeWithRelations[];
-  members: Member[];
-  categories: Category[];
-  themeColor: string;
-}) {
+export default function DashboardClient() {
+  const { supabase, household } = useHousehold();
+
+  const [loading, setLoading] = useState(true);
+  const [expenses, setExpenses] = useState<ExpenseWithRelations[]>([]);
+  const [incomes, setIncomes] = useState<IncomeWithRelations[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+
   const [dateFrom, setDateFrom] = useState(startOfMonthISO());
   const [dateTo, setDateTo] = useState(endOfMonthISO());
   const [categoryFilter, setCategoryFilter] = useState("");
   const [memberFilter, setMemberFilter] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      await supabase.rpc("generate_due_recurring_expenses");
+
+      const [{ data: expensesData }, { data: incomesData }, { data: membersData }, { data: categoriesData }] =
+        await Promise.all([
+          supabase
+            .from("expenses")
+            .select("*, profiles!member_id(id, full_name), categories(id, name)")
+            .eq("household_id", household.id)
+            .order("expense_date", { ascending: false }),
+          supabase
+            .from("incomes")
+            .select("*, profiles!member_id(id, full_name)")
+            .eq("household_id", household.id)
+            .order("income_date", { ascending: false }),
+          supabase.from("profiles").select("id, full_name").eq("household_id", household.id),
+          supabase.from("categories").select("id, name").eq("household_id", household.id).order("name"),
+        ]);
+
+      if (cancelled) return;
+      setExpenses((expensesData ?? []) as ExpenseWithRelations[]);
+      setIncomes((incomesData ?? []) as IncomeWithRelations[]);
+      setMembers(membersData ?? []);
+      setCategories(categoriesData ?? []);
+      setLoading(false);
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, household.id]);
 
   // Filtradas solo por fecha/categoría (sin integrante): la base para el
   // desglose por integrante, que siempre muestra a todos independientemente
@@ -98,6 +131,10 @@ export default function DashboardClient({
       .sort((a, b) => b.total - a.total);
     return { memberTotals, categoryTotals };
   }, [filteredExpenses]);
+
+  if (loading) {
+    return <p className="p-6 text-sm text-black/50 dark:text-white/50">Cargando...</p>;
+  }
 
   return (
     <main className="mx-auto max-w-3xl space-y-6 p-4 sm:p-6">
@@ -208,7 +245,7 @@ export default function DashboardClient({
 
       <section className="rounded-xl border border-black/10 p-4 dark:border-white/15">
         <h2 className="mb-3 text-sm font-semibold">Quién aportó más</h2>
-        <MemberBarChart data={memberTotals} color={themeColor} />
+        <MemberBarChart data={memberTotals} color={household.theme_color} />
       </section>
 
       <section className="rounded-xl border border-black/10 p-4 dark:border-white/15">

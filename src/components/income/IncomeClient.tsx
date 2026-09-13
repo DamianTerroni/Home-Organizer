@@ -1,38 +1,79 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useMemo, useState } from "react";
-import { saveIncome, deleteIncome, type IncomeFormState } from "@/app/(main)/income/actions";
+import { useActionState, useCallback, useEffect, useMemo, useState } from "react";
+import { createSaveIncome, deleteIncome, type IncomeFormState } from "@/app/(main)/income/actions";
+import { useHousehold } from "@/lib/HouseholdContext";
 import type { IncomeWithRelations } from "@/lib/types";
 
 type Member = { id: string; full_name: string };
 
 const initialState: IncomeFormState = {};
 
-export default function IncomeClient({
-  initialIncomes,
-  members,
-  currentUserId,
-}: {
-  initialIncomes: IncomeWithRelations[];
-  members: Member[];
-  currentUserId: string;
-}) {
+export default function IncomeClient() {
+  const { supabase, household, user } = useHousehold();
+
+  const [loading, setLoading] = useState(true);
+  const [incomes, setIncomes] = useState<IncomeWithRelations[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<IncomeWithRelations | null>(null);
   const [memberFilter, setMemberFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+
+  const fetchAll = useCallback(async () => {
+    const [{ data: incomesData }, { data: membersData }] = await Promise.all([
+      supabase
+        .from("incomes")
+        .select("*, profiles!member_id(id, full_name)")
+        .eq("household_id", household.id)
+        .order("income_date", { ascending: false }),
+      supabase.from("profiles").select("id, full_name").eq("household_id", household.id),
+    ]);
+
+    setIncomes((incomesData ?? []) as IncomeWithRelations[]);
+    setMembers(membersData ?? []);
+    setLoading(false);
+  }, [supabase, household.id]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load on mount, not derived-state sync.
+    fetchAll();
+  }, [fetchAll]);
+
+  const baseSave = useMemo(
+    () => createSaveIncome(supabase, household.id, user.id),
+    [supabase, household.id, user.id]
+  );
+
+  const saveIncome = useCallback(
+    async (prevState: IncomeFormState, formData: FormData) => {
+      const result = await baseSave(prevState, formData);
+      if (!result.error) {
+        await fetchAll();
+        setShowForm(false);
+      }
+      return result;
+    },
+    [baseSave, fetchAll]
+  );
+
   const [formState, formAction, pending] = useActionState(saveIncome, initialState);
 
+  async function handleDelete(id: string) {
+    await deleteIncome(supabase, user.id, id);
+    await fetchAll();
+  }
+
   const filtered = useMemo(() => {
-    return initialIncomes.filter((i) => {
+    return incomes.filter((i) => {
       if (memberFilter && i.member_id !== memberFilter) return false;
       if (dateFrom && i.income_date < dateFrom) return false;
       if (dateTo && i.income_date > dateTo) return false;
       return true;
     });
-  }, [initialIncomes, memberFilter, dateFrom, dateTo]);
+  }, [incomes, memberFilter, dateFrom, dateTo]);
 
   const total = filtered.reduce((sum, i) => sum + Number(i.amount), 0);
 
@@ -44,6 +85,10 @@ export default function IncomeClient({
   function openEditForm(income: IncomeWithRelations) {
     setEditing(income);
     setShowForm(true);
+  }
+
+  if (loading) {
+    return <p className="p-6 text-sm text-black/50 dark:text-white/50">Cargando...</p>;
   }
 
   return (
@@ -95,7 +140,7 @@ export default function IncomeClient({
           />
           <select
             name="memberId"
-            defaultValue={editing?.member_id ?? currentUserId}
+            defaultValue={editing?.member_id ?? user.id}
             className="col-span-2 rounded-lg border border-black/10 px-3 py-2 dark:border-white/15"
           >
             {members.map((m) => (
@@ -160,7 +205,7 @@ export default function IncomeClient({
           </thead>
           <tbody>
             {filtered.map((i) => {
-              const isOwner = i.created_by === currentUserId;
+              const isOwner = i.created_by === user.id;
               return (
                 <tr key={i.id} className="border-t border-black/5 dark:border-white/10">
                   <td className="px-3 py-2 whitespace-nowrap">{i.income_date}</td>
@@ -177,12 +222,13 @@ export default function IncomeClient({
                         >
                           ✎
                         </button>
-                        <form action={deleteIncome} className="inline">
-                          <input type="hidden" name="id" value={i.id} />
-                          <button className="text-black/40 hover:text-red-600 dark:text-white/40" title="Borrar">
-                            ✕
-                          </button>
-                        </form>
+                        <button
+                          onClick={() => handleDelete(i.id)}
+                          className="text-black/40 hover:text-red-600 dark:text-white/40"
+                          title="Borrar"
+                        >
+                          ✕
+                        </button>
                       </>
                     ) : (
                       <span className="text-xs text-black/30 dark:text-white/30" title="Solo quien lo cargó puede editarlo">

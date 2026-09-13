@@ -1,6 +1,8 @@
+"use client";
+
 import Link from "next/link";
-import SetupNeeded from "@/components/SetupNeeded";
-import { requireHousehold } from "@/lib/session";
+import { useEffect, useState } from "react";
+import { useHousehold } from "@/lib/HouseholdContext";
 
 type TripRow = {
   id: string;
@@ -11,26 +13,40 @@ type TripRow = {
   paid_by_profile: { full_name: string } | null;
 };
 
-export default async function ShoppingHistoryPage() {
-  const session = await requireHousehold();
-  if (session.status === "unconfigured") return <SetupNeeded />;
-  const { supabase, household } = session;
+export default function ShoppingHistoryPage() {
+  const { supabase, household } = useHousehold();
+  const [loading, setLoading] = useState(true);
+  const [trips, setTrips] = useState<TripRow[]>([]);
 
-  const { data } = await supabase
-    .from("shopping_trips")
-    .select(
-      "id, amount, items, completed_at, completed_by_profile:profiles!completed_by(full_name), paid_by_profile:profiles!paid_by(full_name)"
-    )
-    .eq("household_id", household.id)
-    .order("completed_at", { ascending: false });
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const { data } = await supabase
+        .from("shopping_trips")
+        .select(
+          "id, amount, items, completed_at, completed_by_profile:profiles!completed_by(full_name), paid_by_profile:profiles!paid_by(full_name)"
+        )
+        .eq("household_id", household.id)
+        .order("completed_at", { ascending: false });
+      if (cancelled) return;
+      setTrips((data ?? []) as unknown as TripRow[]);
+      setLoading(false);
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, household.id]);
 
-  const trips = (data ?? []) as unknown as TripRow[];
+  if (loading) {
+    return <p className="p-6 text-sm text-black/50 dark:text-white/50">Cargando...</p>;
+  }
 
   return (
     <main className="mx-auto max-w-2xl space-y-4 p-4 sm:p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Historial de compras</h1>
-        <Link href="/shopping-list" className="text-sm text-teal-600 hover:underline">
+        <Link href="/shopping-list" className="text-sm text-[var(--accent)] hover:underline">
           ← Volver a la lista
         </Link>
       </div>

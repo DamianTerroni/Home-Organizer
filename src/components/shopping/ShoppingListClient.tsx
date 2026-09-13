@@ -2,37 +2,53 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useHousehold } from "@/lib/HouseholdContext";
 import type { ShoppingItem } from "@/lib/types";
 
 type Member = { id: string; full_name: string };
 type Category = { id: string; name: string };
 
-export default function ShoppingListClient({
-  initialItems,
-  householdId,
-  currentUserId,
-  members,
-  categories,
-}: {
-  initialItems: ShoppingItem[];
-  householdId: string;
-  currentUserId: string;
-  members: Member[];
-  categories: Category[];
-}) {
-  const [items, setItems] = useState<ShoppingItem[]>(initialItems);
+export default function ShoppingListClient() {
+  const { supabase, household, user } = useHousehold();
+  const householdId = household.id;
+  const currentUserId = user.id;
+
+  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<ShoppingItem[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState("");
   const [showComplete, setShowComplete] = useState(false);
   const [payerId, setPayerId] = useState(currentUserId);
   const [amount, setAmount] = useState("");
   const [saving, setSaving] = useState(false);
-  const supabase = createClient();
 
   useEffect(() => {
-    if (!supabase) return;
+    let cancelled = false;
+    async function load() {
+      const [{ data: itemsData }, { data: membersData }, { data: categoriesData }] = await Promise.all([
+        supabase
+          .from("shopping_items")
+          .select("*")
+          .eq("household_id", householdId)
+          .order("created_at", { ascending: true }),
+        supabase.from("profiles").select("id, full_name").eq("household_id", householdId),
+        supabase.from("categories").select("id, name").eq("household_id", householdId),
+      ]);
+      if (cancelled) return;
+      setItems((itemsData ?? []) as ShoppingItem[]);
+      setMembers(membersData ?? []);
+      setCategories(categoriesData ?? []);
+      setLoading(false);
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, householdId]);
 
+  useEffect(() => {
     const channel = supabase
       .channel(`shopping-list-${householdId}`)
       .on(
@@ -65,13 +81,13 @@ export default function ShoppingListClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [householdId]);
 
-  if (!supabase) {
-    return <p className="p-6 text-sm text-black/50 dark:text-white/50">Supabase no está configurado.</p>;
+  if (loading) {
+    return <p className="p-6 text-sm text-black/50 dark:text-white/50">Cargando...</p>;
   }
 
   async function addItem(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !supabase) return;
+    if (!name.trim()) return;
     await supabase.from("shopping_items").insert({
       household_id: householdId,
       name: name.trim(),
@@ -83,23 +99,21 @@ export default function ShoppingListClient({
   }
 
   async function toggle(item: ShoppingItem) {
-    if (!supabase) return;
     await supabase.from("shopping_items").update({ is_checked: !item.is_checked }).eq("id", item.id);
   }
 
   async function remove(id: string) {
-    if (!supabase) return;
     await supabase.from("shopping_items").delete().eq("id", id);
   }
 
   async function emptyList() {
-    if (!supabase || items.length === 0) return;
+    if (items.length === 0) return;
     if (!confirm("¿Vaciar toda la lista (incluido lo pendiente)? Esto no queda guardado en ningún lado.")) return;
     await supabase.from("shopping_items").delete().eq("household_id", householdId);
   }
 
   async function confirmPurchase() {
-    if (!supabase || done.length === 0) return;
+    if (done.length === 0) return;
     setSaving(true);
     try {
       const amountValue = amount ? Number(amount) : null;

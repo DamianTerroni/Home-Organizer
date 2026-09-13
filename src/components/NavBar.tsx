@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "@/app/auth/actions";
+import { useHousehold } from "@/lib/HouseholdContext";
 
 const TABS = [
   { href: "/", label: "Resumen", icon: "📊" },
@@ -13,6 +14,13 @@ const TABS = [
 
 export default function NavBar({ householdName }: { householdName: string }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { supabase } = useHousehold();
+
+  async function handleSignOut() {
+    await signOut(supabase);
+    router.replace("/login");
+  }
 
   return (
     <>
@@ -34,11 +42,12 @@ export default function NavBar({ householdName }: { householdName: string }) {
             </Link>
           ))}
         </nav>
-        <form action={signOut}>
-          <button className="text-sm text-black/50 hover:underline dark:text-white/50">
-            Salir
-          </button>
-        </form>
+        <button
+          onClick={handleSignOut}
+          className="text-sm text-black/50 hover:underline dark:text-white/50"
+        >
+          Salir
+        </button>
       </header>
 
       <nav className="fixed inset-x-0 bottom-0 z-10 flex border-t border-black/10 bg-[var(--background)] pb-[env(safe-area-inset-bottom)] sm:hidden dark:border-white/15">

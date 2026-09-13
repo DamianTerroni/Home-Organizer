@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useMemo, useState } from "react";
-import { saveExpense, deleteExpense, type ExpenseFormState } from "@/app/(main)/expenses/actions";
+import { useActionState, useCallback, useEffect, useMemo, useState } from "react";
+import { createSaveExpense, deleteExpense, type ExpenseFormState } from "@/app/(main)/expenses/actions";
+import { useHousehold } from "@/lib/HouseholdContext";
 import type { ExpenseWithRelations } from "@/lib/types";
 
 type Member = { id: string; full_name: string };
@@ -10,17 +11,14 @@ type Category = { id: string; name: string };
 
 const initialState: ExpenseFormState = {};
 
-export default function ExpensesClient({
-  initialExpenses,
-  members,
-  categories,
-  currentUserId,
-}: {
-  initialExpenses: ExpenseWithRelations[];
-  members: Member[];
-  categories: Category[];
-  currentUserId: string;
-}) {
+export default function ExpensesClient() {
+  const { supabase, household, user } = useHousehold();
+
+  const [loading, setLoading] = useState(true);
+  const [expenses, setExpenses] = useState<ExpenseWithRelations[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<ExpenseWithRelations | null>(null);
   const [showNewCategory, setShowNewCategory] = useState(false);
@@ -29,10 +27,57 @@ export default function ExpensesClient({
   const [categoryFilter, setCategoryFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+
+  const fetchAll = useCallback(async () => {
+    await supabase.rpc("generate_due_recurring_expenses");
+
+    const [{ data: expensesData }, { data: membersData }, { data: categoriesData }] = await Promise.all([
+      supabase
+        .from("expenses")
+        .select("*, profiles!member_id(id, full_name), categories(id, name)")
+        .eq("household_id", household.id)
+        .order("expense_date", { ascending: false }),
+      supabase.from("profiles").select("id, full_name").eq("household_id", household.id),
+      supabase.from("categories").select("id, name").eq("household_id", household.id).order("name"),
+    ]);
+
+    setExpenses((expensesData ?? []) as ExpenseWithRelations[]);
+    setMembers(membersData ?? []);
+    setCategories(categoriesData ?? []);
+    setLoading(false);
+  }, [supabase, household.id]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load on mount, not derived-state sync.
+    fetchAll();
+  }, [fetchAll]);
+
+  const baseSaveExpense = useMemo(
+    () => createSaveExpense(supabase, household.id, user.id),
+    [supabase, household.id, user.id]
+  );
+
+  const saveExpense = useCallback(
+    async (prevState: ExpenseFormState, formData: FormData) => {
+      const result = await baseSaveExpense(prevState, formData);
+      if (!result.error) {
+        await fetchAll();
+        setShowForm(false);
+      }
+      return result;
+    },
+    [baseSaveExpense, fetchAll]
+  );
+
   const [formState, formAction, pending] = useActionState(saveExpense, initialState);
 
+  async function handleDelete(id: string) {
+    await deleteExpense(supabase, user.id, id);
+    await fetchAll();
+  }
+
   const filtered = useMemo(() => {
-    return initialExpenses.filter((e) => {
+    return expenses.filter((e) => {
       if (minAmount && Number(e.amount) < Number(minAmount)) return false;
       if (memberFilter && e.member_id !== memberFilter) return false;
       if (categoryFilter && e.category_id !== categoryFilter) return false;
@@ -40,7 +85,7 @@ export default function ExpensesClient({
       if (dateTo && e.expense_date > dateTo) return false;
       return true;
     });
-  }, [initialExpenses, minAmount, memberFilter, categoryFilter, dateFrom, dateTo]);
+  }, [expenses, minAmount, memberFilter, categoryFilter, dateFrom, dateTo]);
 
   const total = filtered.reduce((sum, e) => sum + Number(e.amount), 0);
 
@@ -54,6 +99,10 @@ export default function ExpensesClient({
     setEditing(expense);
     setShowNewCategory(false);
     setShowForm(true);
+  }
+
+  if (loading) {
+    return <p className="p-6 text-sm text-black/50 dark:text-white/50">Cargando...</p>;
   }
 
   return (
@@ -119,7 +168,7 @@ export default function ExpensesClient({
           </select>
           <select
             name="memberId"
-            defaultValue={editing?.member_id ?? currentUserId}
+            defaultValue={editing?.member_id ?? user.id}
             className="rounded-lg border border-black/10 px-3 py-2 dark:border-white/15"
           >
             {members.map((m) => (
@@ -236,7 +285,7 @@ export default function ExpensesClient({
           </thead>
           <tbody>
             {filtered.map((e) => {
-              const isOwner = e.created_by === currentUserId;
+              const isOwner = e.created_by === user.id;
               return (
                 <tr key={e.id} className="border-t border-black/5 dark:border-white/10">
                   <td className="px-3 py-2 whitespace-nowrap">{e.expense_date}</td>
@@ -254,12 +303,13 @@ export default function ExpensesClient({
                         >
                           ✎
                         </button>
-                        <form action={deleteExpense} className="inline">
-                          <input type="hidden" name="id" value={e.id} />
-                          <button className="text-black/40 hover:text-red-600 dark:text-white/40" title="Borrar">
-                            ✕
-                          </button>
-                        </form>
+                        <button
+                          onClick={() => handleDelete(e.id)}
+                          className="text-black/40 hover:text-red-600 dark:text-white/40"
+                          title="Borrar"
+                        >
+                          ✕
+                        </button>
                       </>
                     ) : (
                       <span className="text-xs text-black/30 dark:text-white/30" title="Solo quien lo cargó puede editarlo">

@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useState } from "react";
 import {
-  saveRecurringExpense,
+  createSaveRecurringExpense,
   toggleRecurringExpense,
   deleteRecurringExpense,
   type RecurringFormState,
 } from "@/app/(main)/expenses/recurring/actions";
+import { useHousehold } from "@/lib/HouseholdContext";
 import type { RecurringExpenseWithRelations } from "@/lib/types";
 
 type Member = { id: string; full_name: string };
@@ -15,20 +16,66 @@ type Category = { id: string; name: string };
 
 const initialState: RecurringFormState = {};
 
-export default function RecurringExpensesClient({
-  initialRecurring,
-  members,
-  categories,
-  currentUserId,
-}: {
-  initialRecurring: RecurringExpenseWithRelations[];
-  members: Member[];
-  categories: Category[];
-  currentUserId: string;
-}) {
+export default function RecurringExpensesClient() {
+  const { supabase, household, user } = useHousehold();
+
+  const [loading, setLoading] = useState(true);
+  const [recurring, setRecurring] = useState<RecurringExpenseWithRelations[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<RecurringExpenseWithRelations | null>(null);
+
+  const fetchAll = useCallback(async () => {
+    const [{ data: recurringData }, { data: membersData }, { data: categoriesData }] = await Promise.all([
+      supabase
+        .from("recurring_expenses")
+        .select("*, profiles!member_id(id, full_name), categories(id, name)")
+        .eq("household_id", household.id)
+        .order("day_of_month"),
+      supabase.from("profiles").select("id, full_name").eq("household_id", household.id),
+      supabase.from("categories").select("id, name").eq("household_id", household.id).order("name"),
+    ]);
+
+    setRecurring((recurringData ?? []) as RecurringExpenseWithRelations[]);
+    setMembers(membersData ?? []);
+    setCategories(categoriesData ?? []);
+    setLoading(false);
+  }, [supabase, household.id]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load on mount, not derived-state sync.
+    fetchAll();
+  }, [fetchAll]);
+
+  const baseSave = useMemo(
+    () => createSaveRecurringExpense(supabase, household.id, user.id),
+    [supabase, household.id, user.id]
+  );
+
+  const saveRecurringExpense = useCallback(
+    async (prevState: RecurringFormState, formData: FormData) => {
+      const result = await baseSave(prevState, formData);
+      if (!result.error) {
+        await fetchAll();
+        setShowForm(false);
+      }
+      return result;
+    },
+    [baseSave, fetchAll]
+  );
+
   const [formState, formAction, pending] = useActionState(saveRecurringExpense, initialState);
+
+  async function handleToggle(id: string, active: boolean) {
+    await toggleRecurringExpense(supabase, household.id, id, active);
+    await fetchAll();
+  }
+
+  async function handleDelete(id: string) {
+    await deleteRecurringExpense(supabase, user.id, id);
+    await fetchAll();
+  }
 
   function openAddForm() {
     setEditing(null);
@@ -38,6 +85,10 @@ export default function RecurringExpensesClient({
   function openEditForm(item: RecurringExpenseWithRelations) {
     setEditing(item);
     setShowForm(true);
+  }
+
+  if (loading) {
+    return <p className="p-6 text-sm text-black/50 dark:text-white/50">Cargando...</p>;
   }
 
   return (
@@ -112,7 +163,7 @@ export default function RecurringExpensesClient({
           </select>
           <select
             name="memberId"
-            defaultValue={editing?.member_id ?? currentUserId}
+            defaultValue={editing?.member_id ?? user.id}
             className="rounded-lg border border-black/10 px-3 py-2 dark:border-white/15"
           >
             {members.map((m) => (
@@ -135,8 +186,8 @@ export default function RecurringExpensesClient({
       )}
 
       <ul className="space-y-2">
-        {initialRecurring.map((r) => {
-          const isOwner = r.created_by === currentUserId;
+        {recurring.map((r) => {
+          const isOwner = r.created_by === user.id;
           return (
             <li
               key={r.id}
@@ -153,13 +204,12 @@ export default function RecurringExpensesClient({
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <form action={toggleRecurringExpense}>
-                  <input type="hidden" name="id" value={r.id} />
-                  <input type="hidden" name="active" value={String(r.active)} />
-                  <button className="text-xs text-black/50 underline hover:text-black/70 dark:text-white/50 dark:hover:text-white/70">
-                    {r.active ? "Pausar" : "Reactivar"}
-                  </button>
-                </form>
+                <button
+                  onClick={() => handleToggle(r.id, r.active)}
+                  className="text-xs text-black/50 underline hover:text-black/70 dark:text-white/50 dark:hover:text-white/70"
+                >
+                  {r.active ? "Pausar" : "Reactivar"}
+                </button>
                 {isOwner && (
                   <>
                     <button
@@ -169,19 +219,20 @@ export default function RecurringExpensesClient({
                     >
                       ✎
                     </button>
-                    <form action={deleteRecurringExpense}>
-                      <input type="hidden" name="id" value={r.id} />
-                      <button className="text-black/40 hover:text-red-600 dark:text-white/40" title="Borrar">
-                        ✕
-                      </button>
-                    </form>
+                    <button
+                      onClick={() => handleDelete(r.id)}
+                      className="text-black/40 hover:text-red-600 dark:text-white/40"
+                      title="Borrar"
+                    >
+                      ✕
+                    </button>
                   </>
                 )}
               </div>
             </li>
           );
         })}
-        {initialRecurring.length === 0 && (
+        {recurring.length === 0 && (
           <p className="rounded-xl border border-black/10 p-6 text-center text-sm text-black/50 dark:border-white/15 dark:text-white/50">
             No hay gastos recurrentes todavía.
           </p>

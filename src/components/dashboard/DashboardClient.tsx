@@ -24,14 +24,12 @@ export default function DashboardClient({
   incomes,
   members,
   categories,
-  inviteCode,
   themeColor,
 }: {
   expenses: ExpenseWithRelations[];
   incomes: IncomeWithRelations[];
   members: Member[];
   categories: Category[];
-  inviteCode: string;
   themeColor: string;
 }) {
   const [dateFrom, setDateFrom] = useState(startOfMonthISO());
@@ -39,28 +37,49 @@ export default function DashboardClient({
   const [categoryFilter, setCategoryFilter] = useState("");
   const [memberFilter, setMemberFilter] = useState("");
 
-  const filteredExpenses = useMemo(() => {
+  // Filtradas solo por fecha/categoría (sin integrante): la base para el
+  // desglose por integrante, que siempre muestra a todos independientemente
+  // del filtro de integrante de arriba.
+  const dateCategoryExpenses = useMemo(() => {
     return expenses.filter((e) => {
       if (dateFrom && e.expense_date < dateFrom) return false;
       if (dateTo && e.expense_date > dateTo) return false;
       if (categoryFilter && e.category_id !== categoryFilter) return false;
-      if (memberFilter && e.member_id !== memberFilter) return false;
       return true;
     });
-  }, [expenses, dateFrom, dateTo, categoryFilter, memberFilter]);
+  }, [expenses, dateFrom, dateTo, categoryFilter]);
 
-  const filteredIncomes = useMemo(() => {
+  const dateIncomes = useMemo(() => {
     return incomes.filter((i) => {
       if (dateFrom && i.income_date < dateFrom) return false;
       if (dateTo && i.income_date > dateTo) return false;
-      if (memberFilter && i.member_id !== memberFilter) return false;
       return true;
     });
-  }, [incomes, dateFrom, dateTo, memberFilter]);
+  }, [incomes, dateFrom, dateTo]);
+
+  const filteredExpenses = useMemo(() => {
+    return dateCategoryExpenses.filter((e) => !memberFilter || e.member_id === memberFilter);
+  }, [dateCategoryExpenses, memberFilter]);
+
+  const filteredIncomes = useMemo(() => {
+    return dateIncomes.filter((i) => !memberFilter || i.member_id === memberFilter);
+  }, [dateIncomes, memberFilter]);
 
   const totalExpenses = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
   const totalIncome = filteredIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
-  const savings = totalIncome - totalExpenses;
+  const generalSavings = totalIncome - totalExpenses;
+
+  const perMember = useMemo(() => {
+    return members.map((m) => {
+      const spent = dateCategoryExpenses
+        .filter((e) => e.member_id === m.id)
+        .reduce((sum, e) => sum + Number(e.amount), 0);
+      const earned = dateIncomes
+        .filter((i) => i.member_id === m.id)
+        .reduce((sum, i) => sum + Number(i.amount), 0);
+      return { id: m.id, name: m.full_name, spent, earned, savings: earned - spent };
+    });
+  }, [members, dateCategoryExpenses, dateIncomes]);
 
   const { memberTotals, categoryTotals } = useMemo(() => {
     const byMember = new Map<string, number>();
@@ -135,7 +154,7 @@ export default function DashboardClient({
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-3 gap-4">
         <div className="rounded-xl border border-black/10 p-4 dark:border-white/15">
           <p className="text-xs text-black/50 dark:text-white/50">Gastado</p>
           <p className="text-2xl font-semibold">${totalExpenses.toFixed(2)}</p>
@@ -145,18 +164,47 @@ export default function DashboardClient({
           <p className="text-2xl font-semibold">${totalIncome.toFixed(2)}</p>
         </div>
         <div className="rounded-xl border border-black/10 p-4 dark:border-white/15">
-          <p className="text-xs text-black/50 dark:text-white/50">Ahorro</p>
-          <p className={`text-2xl font-semibold ${savings < 0 ? "text-red-600" : ""}`}>${savings.toFixed(2)}</p>
-        </div>
-        <div className="rounded-xl border border-black/10 p-4 dark:border-white/15">
-          <p className="text-xs text-black/50 dark:text-white/50">Código de invitación</p>
-          <p className="text-2xl font-semibold tracking-widest">{inviteCode}</p>
+          <p className="text-xs text-black/50 dark:text-white/50">Ahorro general</p>
+          <p className={`text-2xl font-semibold ${generalSavings < 0 ? "text-red-600" : ""}`}>
+            ${generalSavings.toFixed(2)}
+          </p>
         </div>
       </div>
 
       <Link href="/income" className="inline-block text-sm text-[var(--accent)] hover:underline">
         Ver / cargar ingresos →
       </Link>
+
+      <section className="rounded-xl border border-black/10 p-4 dark:border-white/15">
+        <h2 className="mb-3 text-sm font-semibold">Ahorro por integrante</h2>
+        <p className="mb-3 text-xs text-black/50 dark:text-white/50">
+          A cada ingreso se le resta solo lo que esa persona gastó, no el total del hogar.
+        </p>
+        <div className="space-y-2">
+          {perMember.map((m) => (
+            <div
+              key={m.id}
+              className="flex items-center justify-between rounded-lg border border-black/10 px-3 py-2 text-sm dark:border-white/15"
+            >
+              <span className="font-medium">{m.name}</span>
+              <div className="flex gap-4 text-right">
+                <div>
+                  <p className="text-xs text-black/50 dark:text-white/50">Gastó</p>
+                  <p>${m.spent.toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-black/50 dark:text-white/50">Ingresó</p>
+                  <p>${m.earned.toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-black/50 dark:text-white/50">Ahorro</p>
+                  <p className={m.savings < 0 ? "text-red-600" : ""}>${m.savings.toFixed(2)}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section className="rounded-xl border border-black/10 p-4 dark:border-white/15">
         <h2 className="mb-3 text-sm font-semibold">Quién aportó más</h2>

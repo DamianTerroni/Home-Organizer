@@ -31,7 +31,6 @@ export default async function DashboardPage() {
       incomes={(incomes ?? []) as IncomeWithRelations[]}
       members={members ?? []}
       categories={categories ?? []}
-      inviteCode={household.invite_code}
       themeColor={household.theme_color}
     />
   );

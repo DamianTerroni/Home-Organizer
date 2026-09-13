@@ -13,12 +13,14 @@ const PRESET_COLORS = ["#0d9488", "#2563eb", "#7c3aed", "#db2777", "#dc2626", "#
 export default function SettingsClient({
   profile,
   themeColor,
+  inviteCode,
   members,
   pendingProposals,
   currentUserId,
 }: {
   profile: Profile;
   themeColor: string;
+  inviteCode: string;
   members: Member[];
   pendingProposals: ProposalWithVotes[];
   currentUserId: string;
@@ -111,6 +113,14 @@ export default function SettingsClient({
       <h1 className="text-lg font-semibold">Ajustes personales</h1>
 
       {error && <p className="rounded-lg bg-red-600/10 px-3 py-2 text-sm text-red-600">{error}</p>}
+
+      <section className="space-y-1 rounded-xl border border-black/10 p-4 dark:border-white/15">
+        <h2 className="text-sm font-semibold">Código de invitación</h2>
+        <p className="text-2xl font-semibold tracking-widest">{inviteCode}</p>
+        <p className="text-xs text-black/50 dark:text-white/50">
+          Compartíselo a quien quieras invitar al hogar para que se una desde &ldquo;Unirme&rdquo; al crear su cuenta.
+        </p>
+      </section>
 
       <section className="space-y-3 rounded-xl border border-black/10 p-4 dark:border-white/15">
         <h2 className="text-sm font-semibold">Mi perfil</h2>

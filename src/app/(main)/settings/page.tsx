@@ -23,6 +23,7 @@ export default async function SettingsPage() {
     <SettingsClient
       profile={profile}
       themeColor={household.theme_color}
+      inviteCode={household.invite_code}
       members={members ?? []}
       pendingProposals={(proposals ?? []) as ProposalWithVotes[]}
       currentUserId={user.id}

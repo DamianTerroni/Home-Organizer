@@ -26,9 +26,14 @@ export default async function proxy(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch {
+    // Un hipo de red hacia Supabase no debe tirar abajo la request entera;
+    // se trata como no autenticado y se reintenta en la próxima navegación.
+  }
 
   const isPublicPath = PUBLIC_PATHS.some((path) => request.nextUrl.pathname.startsWith(path));
 

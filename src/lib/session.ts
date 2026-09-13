@@ -19,9 +19,14 @@ export const getSession = cache(async (): Promise<ReadySession | UnconfiguredSes
   const supabase = await createClient();
   if (!supabase) return { status: "unconfigured" };
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch {
+    // Un hipo de red hacia Supabase no debe romper el render entero;
+    // se manda a login y el usuario reintenta.
+  }
 
   if (!user) redirect("/login");
 

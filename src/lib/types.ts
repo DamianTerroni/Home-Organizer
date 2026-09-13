@@ -36,6 +36,21 @@ export type ExpenseWithRelations = Expense & {
   categories: { id: string; name: string } | null;
 };
 
+export type Income = {
+  id: string;
+  household_id: string;
+  member_id: string;
+  category: string;
+  amount: number;
+  income_date: string;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type IncomeWithRelations = Income & {
+  profiles: { id: string; full_name: string } | null;
+};
+
 export type ShoppingItem = {
   id: string;
   household_id: string;

@@ -16,7 +16,7 @@ export default async function DashboardPage() {
 
   const { data } = await supabase
     .from("expenses")
-    .select("*, profiles(id, full_name), categories(id, name)")
+    .select("*, profiles!member_id(id, full_name), categories(id, name)")
     .eq("household_id", household.id)
     .gte("expense_date", startOfMonthISO())
     .order("expense_date", { ascending: false });
@@ -57,7 +57,7 @@ export default async function DashboardPage() {
 
       <section className="rounded-xl border border-black/10 p-4 dark:border-white/15">
         <h2 className="mb-3 text-sm font-semibold">Quién aportó más este mes</h2>
-        <MemberBarChart data={memberTotals} />
+        <MemberBarChart data={memberTotals} color={household.theme_color} />
       </section>
 
       <section className="rounded-xl border border-black/10 p-4 dark:border-white/15">

@@ -4,7 +4,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 
 export type MemberTotal = { name: string; total: number };
 
-export default function MemberBarChart({ data }: { data: MemberTotal[] }) {
+export default function MemberBarChart({ data, color = "#0d9488" }: { data: MemberTotal[]; color?: string }) {
   if (data.length === 0) {
     return <p className="text-sm text-black/50 dark:text-white/50">Todavía no hay gastos cargados.</p>;
   }
@@ -16,7 +16,7 @@ export default function MemberBarChart({ data }: { data: MemberTotal[] }) {
         <XAxis dataKey="name" fontSize={12} />
         <YAxis fontSize={12} />
         <Tooltip formatter={(value) => `$${Number(value ?? 0).toFixed(2)}`} />
-        <Bar dataKey="total" fill="#0d9488" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="total" fill={color} radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

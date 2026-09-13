@@ -7,7 +7,10 @@ export default async function MainLayout({ children }: { children: React.ReactNo
   if (session.status === "unconfigured") return <SetupNeeded />;
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div
+      className="flex flex-1 flex-col"
+      style={{ "--accent": session.household.theme_color } as React.CSSProperties}
+    >
       <NavBar householdName={session.household.name} />
       <div className="flex-1 pb-16 sm:pb-0">{children}</div>
     </div>

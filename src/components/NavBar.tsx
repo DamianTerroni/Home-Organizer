@@ -8,6 +8,7 @@ const TABS = [
   { href: "/", label: "Resumen", icon: "📊" },
   { href: "/expenses", label: "Gastos", icon: "💸" },
   { href: "/shopping-list", label: "Compras", icon: "🛒" },
+  { href: "/settings", label: "Ajustes", icon: "⚙️" },
 ];
 
 export default function NavBar({ householdName }: { householdName: string }) {
@@ -24,7 +25,7 @@ export default function NavBar({ householdName }: { householdName: string }) {
               href={tab.href}
               className={`rounded-md px-3 py-1.5 text-sm font-medium ${
                 pathname === tab.href
-                  ? "bg-teal-600 text-white"
+                  ? "bg-[var(--accent)] text-white"
                   : "text-black/60 hover:bg-black/5 dark:text-white/60 dark:hover:bg-white/10"
               }`}
             >
@@ -45,7 +46,7 @@ export default function NavBar({ householdName }: { householdName: string }) {
             key={tab.href}
             href={tab.href}
             className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-medium ${
-              pathname === tab.href ? "text-teal-600" : "text-black/50 dark:text-white/50"
+              pathname === tab.href ? "text-[var(--accent)]" : "text-black/50 dark:text-white/50"
             }`}
           >
             <span className="text-lg leading-none">{tab.icon}</span>

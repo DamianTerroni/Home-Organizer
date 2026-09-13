@@ -1,5 +1,6 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { Household, Profile } from "@/lib/types";
 
@@ -13,7 +14,8 @@ type ReadySession = {
 
 type UnconfiguredSession = { status: "unconfigured" };
 
-export async function getSession(): Promise<ReadySession | UnconfiguredSession> {
+// cache() dedupes this across the layout + page calling it in the same request.
+export const getSession = cache(async (): Promise<ReadySession | UnconfiguredSession> => {
   const supabase = await createClient();
   if (!supabase) return { status: "unconfigured" };
 
@@ -23,26 +25,18 @@ export async function getSession(): Promise<ReadySession | UnconfiguredSession> 
 
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
+  const { data: row } = await supabase
     .from("profiles")
-    .select("*")
+    .select("*, households(*)")
     .eq("id", user.id)
     .single();
 
-  if (!profile) redirect("/login");
+  if (!row) redirect("/login");
 
-  let household: Household | null = null;
-  if (profile.household_id) {
-    const { data } = await supabase
-      .from("households")
-      .select("*")
-      .eq("id", profile.household_id)
-      .single();
-    household = data;
-  }
+  const { households, ...profile } = row as Profile & { households: Household | null };
 
-  return { status: "ready", supabase, user, profile: profile as Profile, household };
-}
+  return { status: "ready", supabase, user, profile: profile as Profile, household: households ?? null };
+});
 
 /** Use on pages that require an active household (dashboard, expenses, shopping list). */
 export async function requireHousehold() {

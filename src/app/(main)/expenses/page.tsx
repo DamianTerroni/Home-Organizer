@@ -11,7 +11,7 @@ export default async function ExpensesPage() {
   const [{ data: expenses }, { data: members }, { data: categories }] = await Promise.all([
     supabase
       .from("expenses")
-      .select("*, profiles(id, full_name), categories(id, name)")
+      .select("*, profiles!member_id(id, full_name), categories(id, name)")
       .eq("household_id", household.id)
       .order("expense_date", { ascending: false }),
     supabase.from("profiles").select("id, full_name").eq("household_id", household.id),

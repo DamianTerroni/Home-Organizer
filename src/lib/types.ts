@@ -28,10 +28,29 @@ export type Expense = {
   amount: number;
   expense_date: string;
   created_by: string | null;
+  recurring_expense_id: string | null;
   created_at: string;
 };
 
 export type ExpenseWithRelations = Expense & {
+  profiles: { id: string; full_name: string } | null;
+  categories: { id: string; name: string } | null;
+};
+
+export type RecurringExpense = {
+  id: string;
+  household_id: string;
+  description: string;
+  amount: number;
+  category_id: string | null;
+  member_id: string;
+  day_of_month: number;
+  active: boolean;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type RecurringExpenseWithRelations = RecurringExpense & {
   profiles: { id: string; full_name: string } | null;
   categories: { id: string; name: string } | null;
 };

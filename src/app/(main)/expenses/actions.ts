@@ -49,16 +49,42 @@ export async function saveExpense(
       .eq("created_by", user.id);
     if (error) return { error: error.message };
   } else {
-    const { error } = await supabase.from("expenses").insert({
-      household_id: household.id,
-      member_id: memberId,
-      category_id: categoryId,
-      created_by: user.id,
-      description,
-      amount,
-      ...(expenseDate ? { expense_date: expenseDate } : {}),
-    });
+    const makeRecurring = formData.get("makeRecurring") === "on";
+
+    const { data: inserted, error } = await supabase
+      .from("expenses")
+      .insert({
+        household_id: household.id,
+        member_id: memberId,
+        category_id: categoryId,
+        created_by: user.id,
+        description,
+        amount,
+        ...(expenseDate ? { expense_date: expenseDate } : {}),
+      })
+      .select()
+      .single();
     if (error) return { error: error.message };
+
+    if (makeRecurring && inserted) {
+      const dayOfMonth = Math.min(Number(inserted.expense_date.split("-")[2]), 28);
+      const { data: template, error: recurringError } = await supabase
+        .from("recurring_expenses")
+        .insert({
+          household_id: household.id,
+          description,
+          amount,
+          category_id: categoryId,
+          member_id: memberId,
+          day_of_month: dayOfMonth,
+          created_by: user.id,
+        })
+        .select()
+        .single();
+      if (!recurringError && template) {
+        await supabase.from("expenses").update({ recurring_expense_id: template.id }).eq("id", inserted.id);
+      }
+    }
   }
 
   revalidatePath("/expenses");

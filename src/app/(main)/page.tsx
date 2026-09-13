@@ -8,6 +8,8 @@ export default async function DashboardPage() {
   if (session.status === "unconfigured") return <SetupNeeded />;
   const { supabase, household } = session;
 
+  await supabase.rpc("generate_due_recurring_expenses");
+
   const [{ data: expenses }, { data: incomes }, { data: members }, { data: categories }] = await Promise.all([
     supabase
       .from("expenses")

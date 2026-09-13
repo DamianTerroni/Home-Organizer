@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useMemo, useState } from "react";
 import { saveExpense, deleteExpense, type ExpenseFormState } from "@/app/(main)/expenses/actions";
 import type { ExpenseWithRelations } from "@/lib/types";
@@ -58,7 +59,12 @@ export default function ExpensesClient({
   return (
     <main className="mx-auto max-w-3xl space-y-4 p-4 sm:p-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Gastos y aportes</h1>
+        <div>
+          <h1 className="text-lg font-semibold">Gastos y aportes</h1>
+          <Link href="/expenses/recurring" className="text-xs text-[var(--accent)] hover:underline">
+            Gastos recurrentes →
+          </Link>
+        </div>
         <button
           onClick={() => (showForm ? setShowForm(false) : openAddForm())}
           className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white"
@@ -130,6 +136,13 @@ export default function ExpensesClient({
               required
               className="col-span-2 rounded-lg border border-black/10 px-3 py-2 dark:border-white/15"
             />
+          )}
+
+          {!editing && (
+            <label className="col-span-2 flex items-center gap-2 text-sm text-black/60 dark:text-white/60">
+              <input type="checkbox" name="makeRecurring" className="h-4 w-4" />
+              Repetir todos los meses (ej. alquiler, servicios)
+            </label>
           )}
 
           {formState.error && (

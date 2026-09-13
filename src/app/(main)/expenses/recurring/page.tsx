@@ -1,28 +1,26 @@
 import SetupNeeded from "@/components/SetupNeeded";
-import ExpensesClient from "@/components/expenses/ExpensesClient";
+import RecurringExpensesClient from "@/components/expenses/RecurringExpensesClient";
 import { requireHousehold } from "@/lib/session";
-import type { ExpenseWithRelations } from "@/lib/types";
+import type { RecurringExpenseWithRelations } from "@/lib/types";
 
-export default async function ExpensesPage() {
+export default async function RecurringExpensesPage() {
   const session = await requireHousehold();
   if (session.status === "unconfigured") return <SetupNeeded />;
   const { supabase, household, user } = session;
 
-  await supabase.rpc("generate_due_recurring_expenses");
-
-  const [{ data: expenses }, { data: members }, { data: categories }] = await Promise.all([
+  const [{ data: recurring }, { data: members }, { data: categories }] = await Promise.all([
     supabase
-      .from("expenses")
+      .from("recurring_expenses")
       .select("*, profiles!member_id(id, full_name), categories(id, name)")
       .eq("household_id", household.id)
-      .order("expense_date", { ascending: false }),
+      .order("day_of_month"),
     supabase.from("profiles").select("id, full_name").eq("household_id", household.id),
     supabase.from("categories").select("id, name").eq("household_id", household.id).order("name"),
   ]);
 
   return (
-    <ExpensesClient
-      initialExpenses={(expenses ?? []) as ExpenseWithRelations[]}
+    <RecurringExpensesClient
+      initialRecurring={(recurring ?? []) as RecurringExpenseWithRelations[]}
       members={members ?? []}
       categories={categories ?? []}
       currentUserId={user.id}

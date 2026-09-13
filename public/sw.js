@@ -1,4 +1,4 @@
-const CACHE_NAME = "hogar-shell-v1";
+const CACHE_NAME = "hogar-shell-v2";
 const SHELL_ASSETS = ["/manifest.json", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -15,11 +15,17 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Network-first: la app siempre necesita datos frescos de Supabase.
+// No intercepta la navegación de páginas ni las llamadas a Supabase: eso
+// siempre tiene que ir directo a la red y usar el manejo normal del navegador
+// (con sus propios timeouts/reintentos). Si lo interceptábamos acá y la red
+// estaba lenta, la promesa podía quedar colgada para siempre con la app en
+// pantalla negra. El service worker solo sirve para que la PWA sea instalable
+// y cachear el ícono/manifest para que abra rápido.
 self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET") return;
+  if (event.request.method !== "GET" || event.request.mode === "navigate") return;
+  if (!SHELL_ASSETS.some((asset) => event.request.url.endsWith(asset))) return;
 
   event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request).then((res) => res ?? Response.error()))
+    caches.match(event.request).then((cached) => cached ?? fetch(event.request))
   );
 });

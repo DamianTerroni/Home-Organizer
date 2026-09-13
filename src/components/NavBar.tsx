@@ -23,6 +23,7 @@ export default function NavBar({ householdName }: { householdName: string }) {
             <Link
               key={tab.href}
               href={tab.href}
+              prefetch={false}
               className={`rounded-md px-3 py-1.5 text-sm font-medium ${
                 pathname === tab.href
                   ? "bg-[var(--accent)] text-white"
@@ -45,6 +46,7 @@ export default function NavBar({ householdName }: { householdName: string }) {
           <Link
             key={tab.href}
             href={tab.href}
+            prefetch={false}
             className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-medium ${
               pathname === tab.href ? "text-[var(--accent)]" : "text-black/50 dark:text-white/50"
             }`}

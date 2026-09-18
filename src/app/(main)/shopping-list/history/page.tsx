@@ -7,6 +7,7 @@ import { useHousehold } from "@/lib/HouseholdContext";
 type TripRow = {
   id: string;
   amount: number | null;
+  store_name: string | null;
   items: { name: string; quantity: string | null }[];
   completed_at: string;
   completed_by_profile: { full_name: string } | null;
@@ -24,7 +25,7 @@ export default function ShoppingHistoryPage() {
       const { data } = await supabase
         .from("shopping_trips")
         .select(
-          "id, amount, items, completed_at, completed_by_profile:profiles!completed_by(full_name), paid_by_profile:profiles!paid_by(full_name)"
+          "id, amount, store_name, items, completed_at, completed_by_profile:profiles!completed_by(full_name), paid_by_profile:profiles!paid_by(full_name)"
         )
         .eq("household_id", household.id)
         .order("completed_at", { ascending: false });
@@ -63,6 +64,7 @@ export default function ShoppingHistoryPage() {
           <li key={trip.id} className="rounded-xl border border-black/10 p-4 dark:border-white/15">
             <div className="mb-2 flex items-center justify-between text-sm">
               <span className="font-medium">
+                {trip.store_name && <>{trip.store_name} · </>}
                 {new Date(trip.completed_at).toLocaleDateString("es-AR", {
                   day: "2-digit",
                   month: "long",

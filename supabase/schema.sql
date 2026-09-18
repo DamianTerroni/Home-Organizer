@@ -72,10 +72,13 @@ create table shopping_trips (
   household_id uuid not null references households(id) on delete cascade,
   completed_by uuid references profiles(id) on delete set null,
   paid_by uuid references profiles(id) on delete set null,
+  store_name text,
   amount numeric(12,2),
   items jsonb not null,
   completed_at timestamptz not null default now()
 );
+
+alter table expenses add column shopping_trip_id uuid references shopping_trips(id) on delete set null;
 
 create table incomes (
   id uuid primary key default gen_random_uuid(),

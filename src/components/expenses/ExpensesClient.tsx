@@ -28,6 +28,7 @@ export default function ExpensesClient() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [viewingItems, setViewingItems] = useState<{ name: string; quantity: string | null }[] | null>(null);
 
   const fetchAll = useCallback(async () => {
     await supabase.rpc("generate_due_recurring_expenses");
@@ -35,7 +36,7 @@ export default function ExpensesClient() {
     const [{ data: expensesData }, { data: membersData }, { data: categoriesData }] = await Promise.all([
       supabase
         .from("expenses")
-        .select("*, profiles!member_id(id, full_name), categories(id, name)")
+        .select("*, profiles!member_id(id, full_name), categories(id, name), shopping_trips(items)")
         .eq("household_id", household.id)
         .order("expense_date", { ascending: false }),
       supabase.from("profiles").select("id, full_name").eq("household_id", household.id),
@@ -301,7 +302,18 @@ export default function ExpensesClient() {
               return (
                 <tr key={e.id} className="border-t border-black/5 dark:border-white/10">
                   <td className="px-3 py-2 whitespace-nowrap">{e.expense_date}</td>
-                  <td className="px-3 py-2">{e.description}</td>
+                  <td className="px-3 py-2">
+                    {e.shopping_trips ? (
+                      <button
+                        onClick={() => setViewingItems(e.shopping_trips!.items)}
+                        className="text-[var(--accent)] underline decoration-dotted hover:decoration-solid"
+                      >
+                        {e.description}
+                      </button>
+                    ) : (
+                      e.description
+                    )}
+                  </td>
                   <td className="px-3 py-2">{e.categories?.name ?? "—"}</td>
                   <td className="px-3 py-2">{e.profiles?.full_name ?? "—"}</td>
                   <td className="px-3 py-2 text-right">${Number(e.amount).toFixed(2)}</td>
@@ -353,6 +365,33 @@ export default function ExpensesClient() {
           )}
         </table>
       </div>
+
+      {viewingItems && (
+        <div
+          className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setViewingItems(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl bg-[var(--background)] p-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold">Artículos comprados</h2>
+              <button onClick={() => setViewingItems(null)} className="text-black/40 dark:text-white/40">
+                ✕
+              </button>
+            </div>
+            <ul className="space-y-1 text-sm">
+              {viewingItems.map((item, i) => (
+                <li key={i}>
+                  {item.name}
+                  {item.quantity && <span className="text-black/50 dark:text-white/50"> ({item.quantity})</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

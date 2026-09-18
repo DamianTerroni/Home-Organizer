@@ -21,8 +21,10 @@ export default function ShoppingListClient() {
   const [quantity, setQuantity] = useState("");
   const [showComplete, setShowComplete] = useState(false);
   const [payerId, setPayerId] = useState(currentUserId);
+  const [storeName, setStoreName] = useState("");
   const [amount, setAmount] = useState("");
   const [saving, setSaving] = useState(false);
+  const [completeError, setCompleteError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,33 +100,49 @@ export default function ShoppingListClient() {
     setQuantity("");
   }
 
+  // Actualiza el estado local al toque en vez de esperar el eco de Realtime:
+  // confiar solo en Realtime para la propia acción hacía que a veces pareciera
+  // que "no pasaba nada" hasta navegar a otra pantalla y volver.
   async function toggle(item: ShoppingItem) {
+    setItems((current) => current.map((i) => (i.id === item.id ? { ...i, is_checked: !item.is_checked } : i)));
     await supabase.from("shopping_items").update({ is_checked: !item.is_checked }).eq("id", item.id);
   }
 
   async function remove(id: string) {
+    setItems((current) => current.filter((i) => i.id !== id));
     await supabase.from("shopping_items").delete().eq("id", id);
   }
 
   async function emptyList() {
     if (items.length === 0) return;
     if (!confirm("¿Vaciar toda la lista (incluido lo pendiente)? Esto no queda guardado en ningún lado.")) return;
+    setItems([]);
     await supabase.from("shopping_items").delete().eq("household_id", householdId);
   }
 
   async function confirmPurchase() {
     if (done.length === 0) return;
+    if (!storeName.trim()) {
+      setCompleteError("Decinos en qué mercado fue.");
+      return;
+    }
+    setCompleteError(null);
     setSaving(true);
     try {
       const amountValue = amount ? Number(amount) : null;
 
-      await supabase.from("shopping_trips").insert({
-        household_id: householdId,
-        completed_by: currentUserId,
-        paid_by: payerId || null,
-        amount: amountValue,
-        items: done.map((i) => ({ name: i.name, quantity: i.quantity })),
-      });
+      const { data: trip } = await supabase
+        .from("shopping_trips")
+        .insert({
+          household_id: householdId,
+          completed_by: currentUserId,
+          paid_by: payerId || null,
+          store_name: storeName.trim(),
+          amount: amountValue,
+          items: done.map((i) => ({ name: i.name, quantity: i.quantity })),
+        })
+        .select()
+        .single();
 
       if (amountValue) {
         const mercado = categories.find((c) => c.name.toLowerCase() === "mercado");
@@ -133,15 +151,18 @@ export default function ShoppingListClient() {
           member_id: payerId,
           category_id: mercado?.id ?? null,
           created_by: currentUserId,
-          description: "Compra de supermercado",
+          description: storeName.trim(),
           amount: amountValue,
+          shopping_trip_id: trip?.id ?? null,
         });
       }
 
+      setItems((current) => current.filter((i) => !i.is_checked));
       await supabase.from("shopping_items").delete().eq("household_id", householdId).eq("is_checked", true);
 
       setShowComplete(false);
       setAmount("");
+      setStoreName("");
     } finally {
       setSaving(false);
     }
@@ -184,6 +205,12 @@ export default function ShoppingListClient() {
             Se van a archivar los <strong>{done.length}</strong> artículos comprados en el historial. Lo
             pendiente se mantiene en la lista.
           </p>
+          <input
+            value={storeName}
+            onChange={(e) => setStoreName(e.target.value)}
+            placeholder="¿En qué mercado fue? (ej. Día, Carrefour)"
+            className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm dark:border-white/15"
+          />
           <div className="flex flex-wrap gap-2">
             <select
               value={payerId}
@@ -206,8 +233,10 @@ export default function ShoppingListClient() {
               className="flex-1 rounded-lg border border-black/10 px-3 py-2 text-sm dark:border-white/15"
             />
           </div>
+          {completeError && <p className="text-sm text-red-600">{completeError}</p>}
           <p className="text-xs text-black/50 dark:text-white/50">
-            Si cargás un monto, se suma automáticamente al resumen de gastos como &ldquo;Compra de supermercado&rdquo;.
+            Si cargás un monto, se suma automáticamente al resumen de gastos con el mercado como descripción, y
+            desde ahí vas a poder ver qué compraste.
           </p>
           <div className="flex gap-2">
             <button
@@ -247,17 +276,26 @@ export default function ShoppingListClient() {
 
       <ul className="divide-y divide-black/10 rounded-xl border border-black/10 dark:divide-white/10 dark:border-white/15">
         {pending.map((item) => (
-          <li key={item.id} className="flex items-center gap-3 px-4 py-3">
+          <li key={item.id} className="flex items-center gap-1 px-2 py-1">
             <input
               type="checkbox"
               checked={item.is_checked}
               onChange={() => toggle(item)}
               className="h-4 w-4 accent-[var(--accent)]"
             />
-            <span className="flex-1 text-sm">{item.name}</span>
-            {item.quantity && <span className="text-xs text-black/50 dark:text-white/50">{item.quantity}</span>}
-            <button onClick={() => remove(item.id)} className="text-black/30 hover:text-red-600 dark:text-white/30">
-              ✕
+            <button
+              onClick={() => toggle(item)}
+              className="flex flex-1 items-center gap-2 rounded-lg px-2 py-3 text-left text-sm active:bg-black/5 dark:active:bg-white/10"
+            >
+              <span className="flex-1">{item.name}</span>
+              {item.quantity && <span className="text-xs text-black/50 dark:text-white/50">{item.quantity}</span>}
+            </button>
+            <button
+              onClick={() => remove(item.id)}
+              className="p-2 text-black/30 hover:text-red-600 dark:text-white/30"
+              title="Borrar"
+            >
+              🗑️
             </button>
           </li>
         ))}
@@ -275,16 +313,26 @@ export default function ShoppingListClient() {
           </summary>
           <ul className="divide-y divide-black/10 dark:divide-white/10">
             {done.map((item) => (
-              <li key={item.id} className="flex items-center gap-3 px-4 py-3 opacity-60">
+              <li key={item.id} className="flex items-center gap-1 px-2 py-1 opacity-60">
                 <input
                   type="checkbox"
                   checked={item.is_checked}
                   onChange={() => toggle(item)}
                   className="h-4 w-4 accent-[var(--accent)]"
                 />
-                <span className="flex-1 text-sm line-through">{item.name}</span>
-                <button onClick={() => remove(item.id)} className="text-black/30 hover:text-red-600 dark:text-white/30">
-                  ✕
+                <button
+                  onClick={() => toggle(item)}
+                  className="flex flex-1 items-center gap-2 rounded-lg px-2 py-3 text-left text-sm active:bg-black/5 dark:active:bg-white/10"
+                >
+                  <span className="flex-1 line-through">{item.name}</span>
+                  {item.quantity && <span className="text-xs">{item.quantity}</span>}
+                </button>
+                <button
+                  onClick={() => remove(item.id)}
+                  className="p-2 text-black/30 hover:text-red-600 dark:text-white/30"
+                  title="Borrar"
+                >
+                  🗑️
                 </button>
               </li>
             ))}

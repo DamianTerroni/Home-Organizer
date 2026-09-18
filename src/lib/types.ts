@@ -29,12 +29,14 @@ export type Expense = {
   expense_date: string;
   created_by: string | null;
   recurring_expense_id: string | null;
+  shopping_trip_id: string | null;
   created_at: string;
 };
 
 export type ExpenseWithRelations = Expense & {
   profiles: { id: string; full_name: string } | null;
   categories: { id: string; name: string } | null;
+  shopping_trips: { items: { name: string; quantity: string | null }[] } | null;
 };
 
 export type RecurringExpense = {
@@ -85,6 +87,7 @@ export type ShoppingTrip = {
   household_id: string;
   completed_by: string;
   paid_by: string | null;
+  store_name: string | null;
   amount: number | null;
   items: { name: string; quantity: string | null }[];
   completed_at: string;

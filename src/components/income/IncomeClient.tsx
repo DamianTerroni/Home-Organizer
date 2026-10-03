@@ -23,6 +23,14 @@ export default function IncomeClient() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
+  // Controlados a propósito: al cargar varios sueldos atrasados seguidos, la
+  // fecha y el integrante se mantienen entre un alta y la siguiente en vez
+  // de resetearse a "hoy" cada vez que se reabre el formulario.
+  const [formCategory, setFormCategory] = useState("");
+  const [formAmount, setFormAmount] = useState("");
+  const [formDate, setFormDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [formMemberId, setFormMemberId] = useState(user.id);
+
   const fetchAll = useCallback(async () => {
     const [{ data: incomesData }, { data: membersData }] = await Promise.all([
       supabase
@@ -54,8 +62,9 @@ export default function IncomeClient() {
       const result = await baseSave(prevState, formData);
       if (!result.error) {
         await fetchAll();
-        setShowForm(false);
         if (isNew) {
+          setFormCategory("");
+          setFormAmount("");
           const category = String(formData.get("category") ?? "");
           const amount = Number(formData.get("amount"));
           notifyHousehold(
@@ -64,6 +73,9 @@ export default function IncomeClient() {
             `Nuevo ingreso de ${profile.full_name}`,
             `${category} · $${amount.toFixed(2)}`
           );
+        } else {
+          setShowForm(false);
+          setEditing(null);
         }
       }
       return result;
@@ -91,12 +103,23 @@ export default function IncomeClient() {
 
   function openAddForm() {
     setEditing(null);
+    setFormCategory("");
+    setFormAmount("");
     setShowForm(true);
   }
 
   function openEditForm(income: IncomeWithRelations) {
     setEditing(income);
+    setFormCategory(income.category);
+    setFormAmount(String(income.amount));
+    setFormDate(income.income_date);
+    setFormMemberId(income.member_id);
     setShowForm(true);
+  }
+
+  function closeForm() {
+    setShowForm(false);
+    setEditing(null);
   }
 
   if (loading) {
@@ -113,7 +136,7 @@ export default function IncomeClient() {
           </Link>
         </div>
         <button
-          onClick={() => (showForm ? setShowForm(false) : openAddForm())}
+          onClick={() => (showForm ? closeForm() : openAddForm())}
           className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white"
         >
           {showForm ? "Cancelar" : "+ Agregar"}
@@ -122,7 +145,6 @@ export default function IncomeClient() {
 
       {showForm && (
         <form
-          key={editing?.id ?? "new"}
           action={formAction}
           className="grid grid-cols-2 gap-3 rounded-xl border border-black/10 p-4 dark:border-white/15"
         >
@@ -131,7 +153,8 @@ export default function IncomeClient() {
             name="category"
             placeholder="Categoría (ej. Sueldo, Panny 3D)"
             required
-            defaultValue={editing?.category}
+            value={formCategory}
+            onChange={(e) => setFormCategory(e.target.value)}
             className="col-span-2 rounded-lg border border-black/10 px-3 py-2 dark:border-white/15"
           />
           <input
@@ -141,18 +164,21 @@ export default function IncomeClient() {
             min="0.01"
             placeholder="Monto"
             required
-            defaultValue={editing?.amount}
+            value={formAmount}
+            onChange={(e) => setFormAmount(e.target.value)}
             className="rounded-lg border border-black/10 px-3 py-2 dark:border-white/15"
           />
           <input
             name="incomeDate"
             type="date"
-            defaultValue={editing?.income_date ?? new Date().toISOString().slice(0, 10)}
+            value={formDate}
+            onChange={(e) => setFormDate(e.target.value)}
             className="rounded-lg border border-black/10 px-3 py-2 dark:border-white/15"
           />
           <select
             name="memberId"
-            defaultValue={editing?.member_id ?? user.id}
+            value={formMemberId}
+            onChange={(e) => setFormMemberId(e.target.value)}
             className="col-span-2 rounded-lg border border-black/10 px-3 py-2 dark:border-white/15"
           >
             {members.map((m) => (
@@ -171,6 +197,12 @@ export default function IncomeClient() {
           >
             {pending ? "Guardando..." : editing ? "Guardar cambios" : "Guardar ingreso"}
           </button>
+          {!editing && (
+            <p className="col-span-2 text-xs text-black/50 dark:text-white/50">
+              Queda abierto para que puedas cargar varios seguidos — la fecha y el integrante se mantienen
+              hasta que los cambies.
+            </p>
+          )}
         </form>
       )}
 

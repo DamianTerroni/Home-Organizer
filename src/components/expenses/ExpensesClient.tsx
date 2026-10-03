@@ -12,6 +12,10 @@ type Category = { id: string; name: string };
 
 const initialState: ExpenseFormState = {};
 
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export default function ExpensesClient() {
   const { supabase, household, user, profile } = useHousehold();
 
@@ -23,6 +27,20 @@ export default function ExpensesClient() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<ExpenseWithRelations | null>(null);
   const [showNewCategory, setShowNewCategory] = useState(false);
+
+  // Controlados a propósito: al cargar varios gastos atrasados seguidos, la
+  // fecha/categoría/integrante se mantienen entre un alta y la siguiente en
+  // vez de resetearse a "hoy" cada vez que se reabre el formulario (eso fue
+  // justo lo que causó que gastos de fin de septiembre quedaran cargados
+  // como de octubre).
+  const [formDescription, setFormDescription] = useState("");
+  const [formAmount, setFormAmount] = useState("");
+  const [formDate, setFormDate] = useState(todayISO());
+  const [formCategoryId, setFormCategoryId] = useState("");
+  const [formMemberId, setFormMemberId] = useState(user.id);
+  const [formNewCategoryName, setFormNewCategoryName] = useState("");
+  const [formMakeRecurring, setFormMakeRecurring] = useState(false);
+
   const [minAmount, setMinAmount] = useState("");
   const [memberFilter, setMemberFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -65,8 +83,13 @@ export default function ExpensesClient() {
       const result = await baseSaveExpense(prevState, formData);
       if (!result.error) {
         await fetchAll();
-        setShowForm(false);
         if (isNew) {
+          // Deja la fecha/categoría/integrante como estaban para el próximo
+          // alta, y solo limpia lo que cambia gasto a gasto.
+          setFormDescription("");
+          setFormAmount("");
+          setFormNewCategoryName("");
+          setShowNewCategory(false);
           const description = String(formData.get("description") ?? "");
           const amount = Number(formData.get("amount"));
           notifyHousehold(
@@ -75,6 +98,9 @@ export default function ExpensesClient() {
             `Nuevo gasto de ${profile.full_name}`,
             `${description} · $${amount.toFixed(2)}`
           );
+        } else {
+          setShowForm(false);
+          setEditing(null);
         }
       }
       return result;
@@ -104,14 +130,28 @@ export default function ExpensesClient() {
 
   function openAddForm() {
     setEditing(null);
+    setFormDescription("");
+    setFormAmount("");
+    setFormNewCategoryName("");
     setShowNewCategory(false);
     setShowForm(true);
   }
 
   function openEditForm(expense: ExpenseWithRelations) {
     setEditing(expense);
+    setFormDescription(expense.description);
+    setFormAmount(String(expense.amount));
+    setFormDate(expense.expense_date);
+    setFormCategoryId(expense.category_id ?? "");
+    setFormMemberId(expense.member_id);
+    setFormNewCategoryName("");
     setShowNewCategory(false);
     setShowForm(true);
+  }
+
+  function closeForm() {
+    setShowForm(false);
+    setEditing(null);
   }
 
   if (loading) {
@@ -128,7 +168,7 @@ export default function ExpensesClient() {
           </Link>
         </div>
         <button
-          onClick={() => (showForm ? setShowForm(false) : openAddForm())}
+          onClick={() => (showForm ? closeForm() : openAddForm())}
           className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white"
         >
           {showForm ? "Cancelar" : "+ Agregar"}
@@ -137,7 +177,6 @@ export default function ExpensesClient() {
 
       {showForm && (
         <form
-          key={editing?.id ?? "new"}
           action={formAction}
           className="grid grid-cols-2 gap-3 rounded-xl border border-black/10 p-4 dark:border-white/15"
         >
@@ -146,7 +185,8 @@ export default function ExpensesClient() {
             name="description"
             placeholder="Descripción (ej. Alquiler)"
             required
-            defaultValue={editing?.description}
+            value={formDescription}
+            onChange={(e) => setFormDescription(e.target.value)}
             className="col-span-2 rounded-lg border border-black/10 px-3 py-2 dark:border-white/15"
           />
           <input
@@ -156,19 +196,24 @@ export default function ExpensesClient() {
             min="0.01"
             placeholder="Monto"
             required
-            defaultValue={editing?.amount}
+            value={formAmount}
+            onChange={(e) => setFormAmount(e.target.value)}
             className="rounded-lg border border-black/10 px-3 py-2 dark:border-white/15"
           />
           <input
             name="expenseDate"
             type="date"
-            defaultValue={editing?.expense_date ?? new Date().toISOString().slice(0, 10)}
+            value={formDate}
+            onChange={(e) => setFormDate(e.target.value)}
             className="rounded-lg border border-black/10 px-3 py-2 dark:border-white/15"
           />
           <select
             name="categoryId"
-            defaultValue={editing?.category_id ?? ""}
-            onChange={(e) => setShowNewCategory(e.target.value === "__new__")}
+            value={formCategoryId}
+            onChange={(e) => {
+              setFormCategoryId(e.target.value);
+              setShowNewCategory(e.target.value === "__new__");
+            }}
             className="rounded-lg border border-black/10 px-3 py-2 dark:border-white/15"
           >
             <option value="">Sin categoría</option>
@@ -181,7 +226,8 @@ export default function ExpensesClient() {
           </select>
           <select
             name="memberId"
-            defaultValue={editing?.member_id ?? user.id}
+            value={formMemberId}
+            onChange={(e) => setFormMemberId(e.target.value)}
             className="rounded-lg border border-black/10 px-3 py-2 dark:border-white/15"
           >
             {members.map((m) => (
@@ -196,13 +242,21 @@ export default function ExpensesClient() {
               name="newCategoryName"
               placeholder="Nombre de la categoría (ej. Internet/Teléfono)"
               required
+              value={formNewCategoryName}
+              onChange={(e) => setFormNewCategoryName(e.target.value)}
               className="col-span-2 rounded-lg border border-black/10 px-3 py-2 dark:border-white/15"
             />
           )}
 
           {!editing && (
             <label className="col-span-2 flex items-center gap-2 text-sm text-black/60 dark:text-white/60">
-              <input type="checkbox" name="makeRecurring" className="h-4 w-4" />
+              <input
+                type="checkbox"
+                name="makeRecurring"
+                checked={formMakeRecurring}
+                onChange={(e) => setFormMakeRecurring(e.target.checked)}
+                className="h-4 w-4"
+              />
               Repetir todos los meses (ej. alquiler, servicios)
             </label>
           )}
@@ -218,6 +272,12 @@ export default function ExpensesClient() {
           >
             {pending ? "Guardando..." : editing ? "Guardar cambios" : "Guardar gasto"}
           </button>
+          {!editing && (
+            <p className="col-span-2 text-xs text-black/50 dark:text-white/50">
+              Queda abierto para que puedas cargar varios seguidos — la fecha, categoría e integrante se
+              mantienen hasta que los cambies.
+            </p>
+          )}
         </form>
       )}
 
@@ -303,16 +363,27 @@ export default function ExpensesClient() {
                 <tr key={e.id} className="border-t border-black/5 dark:border-white/10">
                   <td className="px-3 py-2 whitespace-nowrap">{e.expense_date}</td>
                   <td className="px-3 py-2">
-                    {e.shopping_trips ? (
-                      <button
-                        onClick={() => setViewingItems(e.shopping_trips!.items)}
-                        className="text-[var(--accent)] underline decoration-dotted hover:decoration-solid"
-                      >
-                        {e.description}
-                      </button>
-                    ) : (
-                      e.description
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {e.shopping_trips ? (
+                        <button
+                          onClick={() => setViewingItems(e.shopping_trips!.items)}
+                          className="text-[var(--accent)] underline decoration-dotted hover:decoration-solid"
+                        >
+                          {e.description}
+                        </button>
+                      ) : (
+                        <span>{e.description}</span>
+                      )}
+                      {e.recurring_expense_id && (
+                        <Link
+                          href="/expenses/recurring"
+                          title="Gasto recurrente: se carga solo cada mes. Click para pausarlo o borrarlo."
+                          className="shrink-0 rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                        >
+                          🔁 recurrente
+                        </Link>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-2">{e.categories?.name ?? "—"}</td>
                   <td className="px-3 py-2">{e.profiles?.full_name ?? "—"}</td>

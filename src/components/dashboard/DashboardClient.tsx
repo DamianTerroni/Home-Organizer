@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import MemberBarChart, { type MemberTotal } from "@/components/charts/MemberBarChart";
 import CategoryPieChart, { type CategoryTotal } from "@/components/charts/CategoryPieChart";
 import { useHousehold } from "@/lib/HouseholdContext";
+import { effectiveIncomeDate } from "@/lib/dates";
 import type { ExpenseWithRelations, IncomeWithRelations } from "@/lib/types";
 
 type Member = { id: string; full_name: string };
@@ -82,10 +83,14 @@ export default function DashboardClient() {
     });
   }, [expenses, dateFrom, dateTo, categoryFilter]);
 
+  // Un sueldo cobrado en la última semana del mes se usa durante todo el mes
+  // siguiente, así que para el Resumen se agrupa por su fecha "efectiva" en
+  // vez de la fecha real en que se cargó (effectiveIncomeDate en src/lib/dates.ts).
   const dateIncomes = useMemo(() => {
     return incomes.filter((i) => {
-      if (dateFrom && i.income_date < dateFrom) return false;
-      if (dateTo && i.income_date > dateTo) return false;
+      const effectiveDate = effectiveIncomeDate(i.income_date);
+      if (dateFrom && effectiveDate < dateFrom) return false;
+      if (dateTo && effectiveDate > dateTo) return false;
       return true;
     });
   }, [incomes, dateFrom, dateTo]);
